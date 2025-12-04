@@ -59,6 +59,7 @@ wt = [0.0, 0.0, 0.0]
 count = 0
 ready_goal = 0
 end = 0
+flag = 0
 
 # Measurements
 torque_M1 = torque_M2 = torque_M3 = 0.0
@@ -116,16 +117,20 @@ ser = serial.Serial(
     timeout=1
 )
 
-dt_N = 0.0
-
 def recibir_datos():
-    global vel_M1, vel_M2, vel_M3, torque_M1, torque_M2, torque_M3, dt_N
+    global vel_M1, vel_M2, vel_M3, torque_M1, torque_M2, torque_M3, flag
     
     if ser.in_waiting > 0:
+        flag = 1
         try:
             data = ser.readline().decode('utf-8').strip()
             valores = data.split(",")
-            vel_M1, vel_M2, vel_M3, torque_M1, torque_M2, torque_M3, dt_N = map(float, valores)
+
+            if len(valores) != 6:
+                print(f"[UART] Paquete inválido ({len(valores)} val): '{data}'")
+                return  # ignorar este paquete y esperar otro
+            
+            vel_M1, vel_M2, vel_M3, torque_M1, torque_M2, torque_M3 = map(float, valores)
             print(f"[MOTORS] M1:{vel_M1:.2f}|{torque_M1:.2f}, M2:{vel_M2:.2f}|{torque_M2:.2f}, M3:{vel_M3:.2f}|{torque_M3:.2f}")
             
            
@@ -137,12 +142,9 @@ def recibir_datos():
 
         
 def enviar_datos():
-    global x_interp, y_interp, count, N, wt, end, ready_goal
-    #mensaje = "2.0,0.0\n"
-    if count >= N:
-        count = N-1
-
-    mensaje = f"{wt[0]:.2f},{wt[1]:.2f},{wt[2]:.2f},{ready_goal},{end}\n"
+    global wt, end
+    
+    mensaje = f"{wt[0]:.2f},{wt[1]:.2f},{wt[2]:.2f},{end}\n"
     ser.write(mensaje.encode('utf-8'))
     print(f"[UART] Enviado: {mensaje.strip()}")
 
@@ -224,7 +226,7 @@ def leer_imus(dt):
 # Bucle Principal
 # ==========================
 dt = 0.02
-goto = pl.GoToGoalController(0.5, 0.0)
+goto = pl.GoToGoalController(0.8, 0.0)
 start = time.time()
 while True:
     elapsed = time.time() - start
@@ -233,32 +235,40 @@ while True:
         start = time.time()
         
         # 1. UART
-        enviar_datos()
         recibir_datos()
-
-        # 2. Cinemática (función externa)
-        vel_x, vel_y, phi_dot = pl.DKinematics(vel_M1, vel_M2, vel_M3, phi)
-        pos_x += dt * vel_x
-        pos_y += dt * vel_y
-        #phi   += dt * phi_dot
-        x_goal = x_interp[int(count)]
-        y_goal = y_interp[int(count)]
-        print(f"xG:{x_goal:.3f} | yG:{y_goal:.3f} | count: {count}")
-        goto.position(pos_x, pos_y, phi, x_goal, y_goal, elapsed)
-
-        if abs(x_goal - pos_x) < 0.05 and abs(y_goal - pos_y) < 0.05:
-            
-            ready_goal = 1
-
-            if count < N:
-                count = count + 1
-            else:
-                end = 1
-
-        print(f"Tiempo de procesamiento: {elapsed}")
-        # 3. Leer IMUs
+        enviar_datos()
+        # 2. Read IMUs
         #leer_imus(dt)
-
-        # 4. Enviar comandos
         
+        if flag == 1:
+            flag = 0
 
+            leer_imus(dt)
+
+            # 3. Kinematics
+            vel_x, vel_y, phi_dot = pl.DKinematics(vel_M1, vel_M2, vel_M3, phi)
+            pos_x += dt * vel_x
+            pos_y += dt * vel_y
+            #phi   += dt * phi_dot
+            
+            # 4. Path tracking algorithm
+            if count < N:
+                x_goal = x_interp[int(count)]
+                y_goal = y_interp[int(count)]
+            print(f"xG:{x_goal:.3f} | yG:{y_goal:.3f} | count: {count}")
+            
+            vx_set, vy_set, vw_set = goto.position(pos_x, pos_y, phi, x_goal, y_goal, elapsed)
+            wt = pl.IKinematics(vx_set, vy_set, vw_set)
+            print(f"Velocidades deseadas de robot: {vx_set}, {vy_set}, {vw_set}")
+            print(f"Velocidades deseadas a motores: {wt[0]}, {wt[1]}, {wt[2]}")
+
+            if abs(x_goal - pos_x) < 0.05 and abs(y_goal - pos_y) < 0.05:
+                 
+                if count < N:
+                    count = count + 1
+                else:
+                    wt = [0.0,0.0,0.0]
+                    end = 1
+
+            print(f"Tiempo de procesamiento: {elapsed}")
+        
