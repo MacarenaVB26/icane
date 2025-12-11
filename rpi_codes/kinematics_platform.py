@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 # Variables
 # Kinematics
@@ -133,3 +134,79 @@ class GoToGoalController:
         """Reinicia los acumuladores integrales"""
         self.eint_GGX = 0.0
         self.eint_GGY = 0.0
+
+
+def world_to_robot_frame(robot_x, robot_y, robot_yaw, waypoint_x, waypoint_y):
+    dx = waypoint_x - robot_x
+    dy = waypoint_y - robot_y
+    xc =  dx * math.cos(robot_yaw) + dy * math.sin(robot_yaw)
+    yc = -dx * math.sin(robot_yaw) + dy * math.cos(robot_yaw)
+    return xc, yc
+
+class StanleyOmni:
+    def __init__(self, K_lat=0.4, K_head=0.4, K_w=0.4, V_forward=0.25):
+        """
+        - K_lat : ganancia sobre error lateral yc
+        - K_head: ganancia sobre error de orientación
+        - K_w   : ganancia para convertir corrección angular → vw_set
+        - V_forward : velocidad hacia adelante del robot
+        """
+        self.K_lat  = K_lat
+        self.K_head = K_head
+        self.K_w    = K_w
+        self.V_forward = V_forward
+
+
+    def compute(self, robot_yaw, waypoint_world, robot_world, waypoint_car_frame):
+        """
+        Calcula vx_set, vy_set, vw_set.
+        parámetros:
+        robot_yaw          → orientación del robot
+        waypoint_world     → (x_goal, y_goal)
+        robot_world        → (pos_x, pos_y)
+        waypoint_car_frame → (xc, yc) convertido previamente con world_to_robot_frame
+
+        salida:
+        vx_set, vy_set, vw_set
+        """
+
+        # ----------------------------------------
+        # 1) ORIENTACIÓN DEL CAMINO
+        # ----------------------------------------
+        wx, wy = waypoint_world
+        rx, ry = robot_world
+        dx = wx - rx
+        dy = wy - ry
+        path_heading = math.atan2(dy, dx)
+
+        # Normalizador de ángulos
+        def norm(a):
+            if a > math.pi: a -= 2 * math.pi
+            if a < -math.pi: a += 2 * math.pi
+            return a
+
+        # ----------------------------------------
+        # 2) ERROR DE ORIENTACIÓN
+        # ----------------------------------------
+        heading_error = norm(path_heading - robot_yaw)
+        heading_term = self.K_head * heading_error
+
+        # ----------------------------------------
+        # 3) ERROR LATERAL (cross-track)
+        # ----------------------------------------
+        xc, yc = waypoint_car_frame
+        crosstrack_term = math.atan2(self.K_lat * yc, self.V_forward)
+
+        # ----------------------------------------
+        # 4) ÁNGULO STANLEY → vw_set
+        # ----------------------------------------
+        steering_angle = heading_term + crosstrack_term
+        vw_set = steering_angle * self.K_w
+
+        # ----------------------------------------
+        # 5) VELOCIDADES vx, vy (robot omni)
+        # ----------------------------------------
+        vx_set = self.V_forward
+        vy_set = self.K_lat * yc   # Movimiento lateral para corregir derrape
+
+        return vx_set, vy_set, vw_set
