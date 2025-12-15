@@ -91,7 +91,7 @@ s = np.concatenate(([0], np.cumsum(segment_lengths)))
 # --------------------------------------------
 # Parameterization
 # --------------------------------------------
-N = 150
+N = 50
 s_uniform = np.linspace(0, s[-1], N)
 
 # --------------------------------------------
@@ -131,7 +131,7 @@ def recibir_datos():
                 return  # ignorar este paquete y esperar otro
             
             vel_M1, vel_M2, vel_M3, torque_M1, torque_M2, torque_M3 = map(float, valores)
-            print(f"[MOTORS] M1:{vel_M1:.2f}|{torque_M1:.2f}, M2:{vel_M2:.2f}|{torque_M2:.2f}, M3:{vel_M3:.2f}|{torque_M3:.2f}")
+            #print(f"[MOTORS] M1:{vel_M1:.2f}|{torque_M1:.2f}, M2:{vel_M2:.2f}|{torque_M2:.2f}, M3:{vel_M3:.2f}|{torque_M3:.2f}")
             
            
         except ValueError as e:
@@ -146,7 +146,7 @@ def enviar_datos():
     
     mensaje = f"{wt[0]:.2f},{wt[1]:.2f},{wt[2]:.2f},{end}\n"
     ser.write(mensaje.encode('utf-8'))
-    print(f"[UART] Enviado: {mensaje.strip()}")
+    #print(f"[UART] Enviado: {mensaje.strip()}")
 
 # ==========================
 # IMUs Setup
@@ -172,9 +172,9 @@ q_xyzw_0 = np.array([quat1_0[1], quat1_0[2], quat1_0[3], quat1_0[0]])
 r0 = R.from_quat(q_xyzw_0)
 euler1_0 = r0.as_euler('yzx', degrees=False)
 
-print("Calibracion inicial completa.")
-print("IMU1 (Euler inicial rad):", np.round(euler1_0, 3))
-print("IMU2 (Euler inicial degree):", euler2_0)
+#print("Calibracion inicial completa.")
+#print("IMU1 (Euler inicial rad):", np.round(euler1_0, 3))
+#print("IMU2 (Euler inicial degree):", euler2_0)
 
 # ==========================
 # Lectura de IMUs
@@ -217,8 +217,8 @@ def leer_imus(dt):
     prev_phi = phi
 
     # Debug
-    print(f"[IMU1] alpha={np.degrees(alpha):.2f} beta={np.degrees(beta):.2f} theta = {np.degrees(theta):.2f}| alpha dot={alpha_dot:.3f} beta dot={beta_dot:.3f}")
-    print(f"[IMU2] phi={np.degrees(phi):.2f} | phi dot={phi_dot:.3f}")
+    #print(f"[IMU1] alpha={np.degrees(alpha):.2f} beta={np.degrees(beta):.2f} theta = {np.degrees(theta):.2f}| alpha dot={alpha_dot:.3f} beta dot={beta_dot:.3f}")
+    #print(f"[IMU2] phi={np.degrees(phi):.2f} | phi dot={phi_dot:.3f}")
 #    print(f"[POS] X={pos_x:.2f}, Y={pos_y:.2f}, Vx={vel_x:.2f}, Vy={vel_y:.2f}")
     print("-" * 70)
 
@@ -227,7 +227,15 @@ def leer_imus(dt):
 # ==========================
 dt = 0.02
 goto = pl.GoToGoalController(0.8, 0.0)
-stan = pl.StanleyOmni(1,1,1,0.1)
+stan = pl.StanleyOmni(0.5, 0.05, 0.1) 
+pure = pl.PurePursuitOmni3W(0.1, 0.08, 0.4) #distancia, velocidad, k orientacion
+controller = pl.StanleyControllerOmnidirectional(
+    k_e=1.0,       # Ganancia de error lateral
+    k_v=1.0,       # Ganancia de velocidad
+    max_steer=0.5  # Límite de velocidad angular
+)
+pathList = path.tolist()
+
 start = time.time()
 while True:
     elapsed = time.time() - start
@@ -262,17 +270,25 @@ while True:
 
             #vx_set, vy_set, vw_set = goto.position(pos_x, pos_y, phi, x_goal, y_goal, elapsed) #stanley
             #stanley----
-            x_rel, y_rel = pl.world_to_robot_frame(pos_x, pos_y, phi, x_goal, y_goal)
-            vx_set, vy_set, vw_set = stan.compute(
-                    phi,
-                    (x_goal, y_goal),
-                    (pos_x, pos_y),
-                    (x_rel, y_rel)
+            #x_rel, y_rel = pl.world_to_robot_frame(pos_x, pos_y, phi, x_goal, y_goal)
+            #vx_set, vy_set, vw_set = stan.compute(
+            #        phi,
+            #        (x_goal, y_goal),
+            #        (pos_x, pos_y),
+            #        (x_rel, y_rel)
+            #)
+
+            # Obtener velocidades
+            vx_set, vy_set, vw_set = pure.compute(
+                robot_pos=(pos_x, pos_y),
+                robot_yaw=phi,
+                waypoints_list=path     
             )
+
 #-----------------------------------
-            wt = pl.IKinematics(vx_set, vy_set, vw_set) #Stanley
-            print(f"Velocidades deseadas de robot: {vx_set}, {vy_set}, {vw_set}")
-            print(f"Velocidades deseadas a motores: {wt[0]}, {wt[1]}, {wt[2]}")
+            wt = pl.IKinematics(vx_set, vy_set, vw_set) #Stanley - pure 
+            #print(f"Velocidades deseadas de robot: {vx_set}, {vy_set}, {vw_set}")
+            #print(f"Velocidades deseadas a motores: {wt[0]}, {wt[1]}, {wt[2]}")
 
             if abs(x_goal - pos_x) < 0.1 and abs(y_goal - pos_y) < 0.1:
                  
@@ -282,6 +298,6 @@ while True:
                     wt = [0.0,0.0,0.0]
                     end = 1
 
-            print(f"Tiempo de procesamiento: {elapsed}")
+            #print(f"Tiempo de procesamiento: {elapsed}")
         
 
