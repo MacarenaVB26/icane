@@ -32,6 +32,23 @@ def DKinematics(vel_M1, vel_M2, vel_M3, phi_c):
     vw = R * (vel_M1 + vel_M2 + vel_M3) / (3.0 / L)
     
     return vx, vy, vw
+def transform_velocities(u, phi):
+    radio = 0.05
+    L = 0.15
+    phi_c = phi
+    eps_O = 30 * np.pi/180
+    sigma1 = -np.sin(eps_O + phi_c)
+    sigma2 = -np.cos(eps_O + phi_c + np.pi/6)
+    sigma3 = np.sin(eps_O + phi_c + np.pi/3)
+    sigma4 = np.cos(eps_O + phi_c)
+    sigma5 = -np.cos(eps_O + phi_c - np.pi/3)
+    sigma6 = -np.cos(eps_O + phi_c + np.pi/3)
+    T_f = np.array([[sigma1, sigma2, sigma3],
+                    [sigma4, sigma5, sigma6],
+                    [L, L, L]])
+    f = np.linalg.inv(T_f) @ u
+    torq = f * radio
+    return torq
 
 def IKinematics(vx_set, vy_set, vw_set):
     """

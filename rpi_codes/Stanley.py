@@ -228,7 +228,7 @@ def leer_imus(dt):
 dt = 0.02
 goto = pl.GoToGoalController(0.8, 0.0)
 stan = pl.StanleyOmni(0.5, 0.05, 0.1) 
-pure = pl.PurePursuitOmni3W(0.1, 0.08, 0.4) #distancia, velocidad, k orientacion
+pure = pl.PurePursuitOmni3W(0.15, 0.08, 0.4) #distancia, velocidad, k orientacion
 controller = pl.StanleyControllerOmnidirectional(
     k_e=1.0,       # Ganancia de error lateral
     k_v=1.0,       # Ganancia de velocidad

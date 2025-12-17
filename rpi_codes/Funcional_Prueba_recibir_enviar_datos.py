@@ -41,7 +41,7 @@ def recibir_datos():
         #    print(len(valores))
 
 def enviar_datos(valor1, valor2, valor3):
-    mensaje = f"<{valor1},{valor2},{valor3}>\n"  # Crear el mensaje con los valores separados por coma
+    mensaje = f"{valor1},{valor2},{valor3}\n"  # Crear el mensaje con los valores separados por coma
     ser.write(mensaje.encode('utf-8'))  
     print(f"Enviando: {mensaje}") 
 
@@ -49,5 +49,5 @@ dt = 0.02
 
 while True:
     recibir_datos()
-    enviar_datos(0.2, 0.2, 0.2)
+    enviar_datos(2.5, 2.5, 2.5)
     time.sleep(dt)
